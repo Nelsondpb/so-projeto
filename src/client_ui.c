@@ -2,8 +2,9 @@
 #include <stdio.h>
 
 /*
- * Códigos ANSI simples para cores.
- * Se quiseres, podes remover as cores e deixar texto simples.
+ * Códigos ANSI simples para cores no terminal.
+ * Servem apenas para melhorar a legibilidade da interface.
+ * Podem ser removidos sem afetar a lógica do programa.
  */
 #define C_RESET   "\033[0m"
 #define C_BOLD    "\033[1m"
@@ -14,6 +15,17 @@
 #define C_RED     "\033[1;31m"
 #define C_GRAY    "\033[1;90m"
 
+/*
+ * Imprime o banner inicial do cliente.
+ *
+ * Mostra o título do programa e informação básica:
+ *  - ID do cliente
+ *  - ID do jogo (se já tiver sido atribuído pelo servidor)
+ *
+ * Parâmetros:
+ *  - client_id : identificador do cliente
+ *  - game_id   : identificador do jogo (-1 se ainda não existir)
+ */
 void ui_print_banner(int client_id, int game_id) {
     printf("\n%s🧩 Cliente Sudoku%s\n", C_BOLD, C_RESET);
     printf("%s──────────────────────────────────────────────%s\n", C_CYAN, C_RESET);
@@ -27,8 +39,21 @@ void ui_print_banner(int client_id, int game_id) {
 }
 
 /*
- * Imprime o tabuleiro 9x9 com separadores de blocos 3x3.
- * As células iniciais (fixas) podem ser destacadas se "initial" != NULL.
+ * Imprime o tabuleiro atual de Sudoku no terminal.
+ *
+ * O tabuleiro é apresentado no formato 9x9 com separadores
+ * visuais para os blocos 3x3.
+ *
+ * As células podem ser:
+ *  - Vazias (.)
+ *  - Fixas (valores iniciais do jogo)
+ *  - Preenchidas pelo cliente
+ *
+ * Parâmetros:
+ *  - grid    : estado atual do tabuleiro
+ *  - initial : tabuleiro inicial (para identificar células fixas)
+ *
+ * Se initial for NULL, todas as células são tratadas como normais.
  */
 void ui_print_grid(const int grid[9][9], const int initial[9][9]) {
     printf("%sTabuleiro atual:%s\n", C_BOLD, C_RESET);
@@ -72,6 +97,21 @@ void ui_print_grid(const int grid[9][9], const int initial[9][9]) {
     printf("   %s──────────────────────────────%s\n\n", C_BLUE, C_RESET);
 }
 
+/*
+ * Imprime o resultado de uma jogada enviada ao servidor.
+ *
+ * A mensagem é colorida consoante o tipo de resposta:
+ *  - Verde   : jogada correta
+ *  - Ciano   : célula fixa
+ *  - Vermelho: erro
+ *  - Amarelo : outro resultado
+ *
+ * Parâmetros:
+ *  - row        : linha da jogada (0-based)
+ *  - col        : coluna da jogada (0-based)
+ *  - value      : valor enviado
+ *  - result_str : string com o resultado devolvido pelo servidor
+ */
 void ui_print_move_result(int row, int col, int value, const char *result_str) {
     const char *color = C_YELLOW;
 
@@ -90,6 +130,23 @@ void ui_print_move_result(int row, int col, int value, const char *result_str) {
            row + 1, col + 1, value, color, result_str, C_RESET);
 }
 
+/*
+ * Imprime um resumo final do jogo após a sua conclusão.
+ *
+ * Mostra estatísticas gerais do cliente:
+ *  - Tempo total de jogo
+ *  - Número total de jogadas
+ *  - Jogadas corretas e incorretas
+ *
+ * Parâmetros:
+ *  - client_id   : ID do cliente
+ *  - game_id     : ID do jogo
+ *  - inicio      : instante de início do jogo
+ *  - fim         : instante de fim do jogo
+ *  - total_moves : número total de jogadas enviadas
+ *  - correct     : número de jogadas corretas
+ *  - incorrect   : número de jogadas incorretas
+ */
 void ui_print_summary(int client_id,
                       int game_id,
                       time_t inicio,

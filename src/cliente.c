@@ -16,47 +16,97 @@
 
 /* ================= CONFIG ================= */
 
+/*
+ * Número de threads usadas para resolver o Sudoku em paralelo.
+ */
 #define N_THREADS 4
+
+/*
+ * Número máximo de tentativas de resolução por thread.
+ */
 #define MAX_TENTATIVAS_THREAD 3
 
 /* ================= TAREFA DA THREAD ================= */
 
+/*
+ * Estrutura que representa a tarefa atribuída a cada thread.
+ */
 typedef struct {
-    int tid;
+    int tid;   /* identificador da thread */
 } SolverTask;
 
 /* ================= ESTADO GLOBAL ================= */
 
+/*
+ * Configuração do cliente carregada do ficheiro.
+ */
 static ClientConfig g_cfg;
+
+/*
+ * Socket de comunicação com o servidor.
+ */
 static int sockfd = -1;
 
+/*
+ * Tabuleiros do Sudoku:
+ *  - inicial : tabuleiro recebido do servidor
+ *  - atual   : estado atual do jogo
+ *  - solucao : solução encontrada pelas threads
+ */
 static int inicial[9][9];
 static int atual[9][9];
 static int solucao[9][9];
 
+/*
+ * Identificador do jogo e instante de início.
+ */
 static int jogo_id = -1;
 static time_t inicio;
 
-/* Estatísticas de jogadas enviadas ao servidor */
+/*
+ * Estatísticas das jogadas enviadas ao servidor.
+ */
 static int total_moves = 0;
 static int correct_moves = 0;
 static int incorrect_moves = 0;
 
 /* ================= SINCRONIZAÇÃO ================= */
 
+/*
+ * Mutex para proteger o acesso à solução partilhada.
+ */
 static pthread_mutex_t mutex_solucao = PTHREAD_MUTEX_INITIALIZER;
+
+/*
+ * Barreira para sincronizar o arranque das threads.
+ */
 static pthread_barrier_t start_barrier;
+
+/*
+ * Semáforo para limitar o número de threads
+ * a resolver simultaneamente.
+ */
 static sem_t sem_solver;
 
+/*
+ * Indica se alguma thread já encontrou a solução.
+ */
 static int solucao_encontrada = 0;
 
 /* ================= UTIL ================= */
 
+/*
+ * Copia um tabuleiro de Sudoku para outro.
+ */
 static void copiar_tabuleiro(int dst[9][9], int src[9][9]) {
     memcpy(dst, src, sizeof(int) * 81);
 }
 
-/* pequena ajuda para processar STATUS */
+/*
+ * Processa mensagens STATUS recebidas do servidor.
+ * Usado para apresentar mensagens informativas e
+ * resultados do modo DUEL.
+ */
 static void process_status_line(const char *line) {
     if (strncmp(line, "STATUS", 6) != 0) return;
 
@@ -87,6 +137,10 @@ static void process_status_line(const char *line) {
 
 /* ================= COMUNICAÇÃO ================= */
 
+/*
+ * Estabelece ligação ao servidor e pede um novo jogo.
+ * Recebe o tabuleiro inicial e inicializa o estado do cliente.
+ */
 static int pedir_jogo(void) {
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -123,7 +177,7 @@ static int pedir_jogo(void) {
 
     char buf[2048];
 
-    /* pode receber STATUS (aguardar duelo) antes do JOGO */
+    /* Pode receber mensagens STATUS antes do JOGO */
     while (1) {
         if (recv_line(sockfd, buf, sizeof(buf)) <= 0) {
             fprintf(stderr, "Erro a receber resposta do servidor\n");
@@ -139,8 +193,6 @@ static int pedir_jogo(void) {
         if (strncmp(buf, "JOGO", 4) == 0) {
             break;
         }
-
-        /* ignorar outras linhas inesperadas */
     }
 
     char *id = get_field_value(buf, "ID");
@@ -179,6 +231,10 @@ static int pedir_jogo(void) {
 
 /* ================= THREAD SOLVER ================= */
 
+/*
+ * Função executada por cada thread de resolução.
+ * Usa barreira, semáforo e mutex para sincronização.
+ */
 static void* solver_thread(void *arg) {
 
     SolverTask *task = (SolverTask*)arg;
@@ -189,7 +245,7 @@ static void* solver_thread(void *arg) {
     log_event(g_cfg.log_file, g_cfg.client_id,
               "THREAD_CREATED", desc);
 
-    /* Esperar barreira inicial (todas as threads prontas) */
+    /* Esperar que todas as threads estejam prontas */
     log_event(g_cfg.log_file, g_cfg.client_id,
               "BARRIER_WAIT", desc);
     pthread_barrier_wait(&start_barrier);
@@ -206,15 +262,13 @@ static void* solver_thread(void *arg) {
         log_event(g_cfg.log_file, g_cfg.client_id,
                   "THREAD_TRY", desc);
 
-        /* Semáforo para limitar quantas threads entram na secção crítica
-           (neste caso, quantas podem estar a resolver em simultâneo) */
+        /* Limitar o número de threads a resolver simultaneamente */
         log_event(g_cfg.log_file, g_cfg.client_id,
                   "SEM_WAIT", desc);
         sem_wait(&sem_solver);
         log_event(g_cfg.log_file, g_cfg.client_id,
                   "SEM_ENTER", desc);
 
-        /* Pequena pausa para tornar o comportamento mais visível em logs */
         usleep(200000);
 
         int local[9][9];
@@ -266,10 +320,12 @@ static void* solver_thread(void *arg) {
 
 /* ================= ENVIO DA SOLUÇÃO ================= */
 
+/*
+ * Recebe mensagens STATUS finais do servidor,
+ * como o resultado de um duelo.
+ */
 static void receber_status_final(void) {
-    /* tentar ler linhas STATUS adicionais (ex: resultado do duelo) */
     char buf[512];
-    /* lemos até EOF ou até receber um STATUS com RESULT */
     while (1) {
         int n = recv_line(sockfd, buf, sizeof(buf));
         if (n <= 0) break;
@@ -277,7 +333,6 @@ static void receber_status_final(void) {
         if (strncmp(buf, "STATUS", 6) == 0) {
             process_status_line(buf);
 
-            /* se houver RESULT, já tratámos o fim do duelo */
             char tmp[512];
             strncpy(tmp, buf, sizeof(tmp)-1);
             tmp[sizeof(tmp)-1] = 0;
@@ -312,7 +367,7 @@ static void enviar_solucao(void) {
 
             int correto = solucao[r][c];
 
-            int n_erradas = rand() % 3;  /* 0, 1 ou 2 erradas */
+            int n_erradas = rand() % 3;
 
             for (int i = 0; i < n_erradas; i++) {
                 int errado;
@@ -325,15 +380,8 @@ static void enviar_solucao(void) {
                          g_cfg.client_id, jogo_id,
                          r + 1, c + 1, errado);
 
-                if (send_line(sockfd, msg) != 0) {
-                    fprintf(stderr, "Erro a enviar jogada errada.\n");
-                    return;
-                }
-
-                if (recv_line(sockfd, resp, sizeof(resp)) <= 0) {
-                    fprintf(stderr, "Erro a receber resposta do servidor.\n");
-                    return;
-                }
+                if (send_line(sockfd, msg) != 0) return;
+                if (recv_line(sockfd, resp, sizeof(resp)) <= 0) return;
 
                 total_moves++;
                 incorrect_moves++;
@@ -341,7 +389,6 @@ static void enviar_solucao(void) {
                 char *result = get_field_value(resp, "RESULT");
                 ui_print_move_result(r, c, errado,
                                      result ? result : "ERR");
-
                 if (result) free(result);
             }
 
@@ -350,15 +397,8 @@ static void enviar_solucao(void) {
                      g_cfg.client_id, jogo_id,
                      r + 1, c + 1, correto);
 
-            if (send_line(sockfd, msg) != 0) {
-                fprintf(stderr, "Erro a enviar jogada correta.\n");
-                return;
-            }
-
-            if (recv_line(sockfd, resp, sizeof(resp)) <= 0) {
-                fprintf(stderr, "Erro a receber resposta do servidor.\n");
-                return;
-            }
+            if (send_line(sockfd, msg) != 0) return;
+            if (recv_line(sockfd, resp, sizeof(resp)) <= 0) return;
 
             total_moves++;
             char *result = get_field_value(resp, "RESULT");
@@ -379,7 +419,6 @@ static void enviar_solucao(void) {
             if (solved && atoi(solved) == 1) {
                 free(solved);
                 ui_print_grid(atual, inicial);
-                /* tentar receber mensagens STATUS finais (duelo) */
                 receber_status_final();
                 return;
             }
@@ -392,6 +431,9 @@ static void enviar_solucao(void) {
 
 /* ================= MAIN ================= */
 
+/*
+ * Função principal do cliente.
+ */
 int main(int argc, char **argv) {
 
     srand((unsigned int)time(NULL));

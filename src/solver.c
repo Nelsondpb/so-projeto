@@ -1,11 +1,22 @@
 #include "solver.h"
 
 /*
- * Verifica se é válido colocar o valor v na posição (r, c)
- * de acordo com as regras do Sudoku:
- *  - não repetir na linha
- *  - não repetir na coluna
- *  - não repetir no bloco 3x3
+ * Verifica se um valor pode ser colocado numa posição do tabuleiro.
+ *
+ * A validação é feita segundo as regras do Sudoku:
+ *  - o valor não pode repetir na linha
+ *  - o valor não pode repetir na coluna
+ *  - o valor não pode repetir no bloco 3x3
+ *
+ * Parâmetros:
+ *  - grid : tabuleiro de Sudoku
+ *  - r    : linha a verificar
+ *  - c    : coluna a verificar
+ *  - v    : valor a testar (1 a 9)
+ *
+ * Retorna:
+ *  - 1 se a jogada for válida
+ *  - 0 se a jogada for inválida
  */
 static int is_valid(int grid[9][9], int r, int c, int v) {
     /* verificar linha */
@@ -18,7 +29,7 @@ static int is_valid(int grid[9][9], int r, int c, int v) {
         if (grid[row][c] == v) return 0;
     }
 
-    /* verificar sub-bloco 3x3 */
+    /* verificar bloco 3x3 */
     int br = (r / 3) * 3;
     int bc = (c / 3) * 3;
     for (int i = br; i < br + 3; i++) {
@@ -31,17 +42,23 @@ static int is_valid(int grid[9][9], int r, int c, int v) {
 }
 
 /*
- * Função recursiva de backtracking que tenta resolver o tabuleiro.
+ * Algoritmo recursivo de backtracking para resolver o Sudoku.
  *
- * Percorre o tabuleiro em ordem linha/coluna à procura da primeira
- * célula vazia (valor 0) e tenta colocar valores de 1 a 9 que sejam
- * válidos. Se em algum ponto ficar preso, volta atrás (backtrack).
+ * Procura uma célula vazia e tenta colocar valores de 1 a 9.
+ * Se uma escolha levar a um estado inválido, faz backtracking.
+ *
+ * Parâmetros:
+ *  - grid : tabuleiro de Sudoku a resolver
+ *
+ * Retorna:
+ *  - 1 se o tabuleiro for resolvido com sucesso
+ *  - 0 se não existir solução válida
  */
 static int backtrack(int grid[9][9]) {
-    /* procurar próxima célula vazia */
     int r = -1, c = -1;
     int found_empty = 0;
 
+    /* procurar a próxima célula vazia */
     for (int i = 0; i < 9 && !found_empty; i++) {
         for (int j = 0; j < 9 && !found_empty; j++) {
             if (grid[i][j] == 0) {
@@ -52,10 +69,10 @@ static int backtrack(int grid[9][9]) {
         }
     }
 
-    /* se não há células vazias, está resolvido */
+    /* se não existem células vazias, o tabuleiro está resolvido */
     if (!found_empty) return 1;
 
-    /* tentar valores 1..9 */
+    /* tentar valores de 1 a 9 */
     for (int v = 1; v <= 9; v++) {
         if (is_valid(grid, r, c, v)) {
             grid[r][c] = v;
@@ -64,15 +81,27 @@ static int backtrack(int grid[9][9]) {
                 return 1;
             }
 
-            /* backtrack */
+            /* backtracking */
             grid[r][c] = 0;
         }
     }
 
-    /* nenhuma opção funcionou */
     return 0;
 }
 
+/*
+ * Resolve um tabuleiro de Sudoku.
+ *
+ * Esta função é a interface pública do módulo solver
+ * e chama internamente o algoritmo de backtracking.
+ *
+ * Parâmetros:
+ *  - grid : tabuleiro de Sudoku a resolver
+ *
+ * Retorna:
+ *  - 1 se o Sudoku foi resolvido
+ *  - 0 se não existe solução
+ */
 int solve_sudoku(int grid[9][9]) {
     return backtrack(grid);
 }

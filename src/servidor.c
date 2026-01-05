@@ -431,7 +431,6 @@ void* cliente_thread(void *arg) {
 
     char linha[2048];
 
-    /* primeira mensagem deve ser o pedido de jogo: PIDE_JOGO;CLIENT_ID=... */
     if (recv_line(fd, linha, sizeof(linha)) <= 0) {
         log_event(g_cfg.log_file, 0, "CLIENT_DISCONNECT", "Cliente desconectou prematuramente.");
         close(fd);
